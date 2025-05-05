@@ -5,10 +5,13 @@ python-dotenv
 langchain
 langchain-community
 sentence-transformers
-chromadb
 pydantic
 markdown
 numpy
 pandas
 pypdf
 tqdm
+google-generativeai
+torch
+# tensorflow==2.16.1
+protobuf

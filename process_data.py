@@ -8,10 +8,11 @@ def check_dependencies():
     try:
         import requests
         import bs4
-        import chromadb
+        import pinecone
         import sentence_transformers
         import pypdf
         import streamlit
+        import google.generativeai
     except ImportError as e:
         print(f"Missing dependency: {e}")
         print("Please run: pip install -r requirements.txt")
@@ -23,7 +24,6 @@ def create_directories():
     directories = [
         "data",
         "data/processed",
-        "data/vectordb",
         "data/pdfs"
     ]
     
@@ -90,10 +90,26 @@ def main():
     
     print(f"\nCombined processed data into {combined_file}")
     
-    # Step 6: Create vector database
-    if not run_script("src/utils/create_embeddings.py", "Creating vector database"):
-        print("Failed to create vector database. Please check the create_embeddings.py script.")
-        return
+    # Step 6: Ask the user whether to use Gemini or sentence-transformers for embeddings
+    use_gemini = input("\nDo you want to use Google Gemini for PDF embeddings? (y/n): ").lower().strip() == 'y'
+    
+    if use_gemini:
+        # Check for Google API key
+        google_api_key = os.getenv("GOOGLE_API_KEY")
+        if not google_api_key:
+            print("\nWarning: GOOGLE_API_KEY environment variable not set. Please set it in your .env file.")
+            print("You can get a free API key from https://aistudio.google.com/app/apikey")
+            return
+        
+        # Create PDF embeddings with Gemini
+        if not run_script("src/utils/create_gemini_embeddings.py", "Creating PDF embeddings with Gemini and storing in Pinecone"):
+            print("Failed to create Gemini embeddings. Please check the create_gemini_embeddings.py script.")
+            return
+    else:
+        # Create Pinecone vector database using sentence-transformers
+        if not run_script("src/utils/create_pinecone_embeddings.py", "Creating Pinecone vector database with sentence-transformers"):
+            print("Failed to create Pinecone vector database. Please check the create_pinecone_embeddings.py script.")
+            return
     
     print("\n\nData processing complete! You can now run the chatbot with: streamlit run app.py")
 
