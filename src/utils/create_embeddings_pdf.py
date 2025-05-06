@@ -16,6 +16,7 @@ load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 def setup_gemini():
+    """Configure and return the Gemini embedding model."""
     genai.configure(api_key=GOOGLE_API_KEY)
     
     # Initialize embedding model
@@ -23,14 +24,23 @@ def setup_gemini():
     
     return embedding_model
 
-def extract_text_from_txt(txt_path: str) -> str:
-    """Extract text content from a TXT file."""
+def extract_text_from_pdf(pdf_path: str) -> str:
+    """Extract text content from a PDF file."""
     try:
-        with open(txt_path, 'r', encoding='utf-8') as file:
-            text = file.read()
+        from pypdf import PdfReader
+        
+        with open(pdf_path, 'rb') as file:
+            pdf_reader = PdfReader(file)
+            
+            # Extract text from each page
+            text = ""
+            for page_num in range(len(pdf_reader.pages)):
+                page = pdf_reader.pages[page_num]
+                text += page.extract_text() + "\n\n"
+                
         return text
     except Exception as e:
-        print(f"Error extracting text from {txt_path}: {e}")
+        print(f"Error extracting text from {pdf_path}: {e}")
         return ""
 
 def clean_text(text: str) -> str:
@@ -77,130 +87,126 @@ def split_into_chunks(text: str, chunk_size: int = 1000, overlap: int = 200) -> 
     
     return chunks
 
-def process_txt(txt_path: str) -> List[Dict]:
-    """Process a single TXT file and return a list of document chunks."""
-    # Extract TXT filename without extension
-    txt_filename = Path(txt_path).stem
+def process_pdf(pdf_path: str) -> List[Dict]:
+    """Process a single PDF file and return a list of document chunks."""
+    # Extract PDF filename without extension
+    filename = Path(pdf_path).stem
     
-    # Extract text from TXT
-    content = extract_text_from_txt(txt_path)
+    # Extract text from PDF
+    text = extract_text_from_pdf(pdf_path)
     
-    if not content:
+    if not text:
+        print(f"No text extracted from {pdf_path}")
         return []
     
-    # Split content into chunks
-    chunks = split_into_chunks(content)
+    # Split text into chunks
+    chunks = split_into_chunks(text)
     
     documents = []
     for i, chunk in enumerate(chunks):
         doc = {
-            "title": txt_filename,
-            "url": txt_path,
+            "title": filename,
             "content": chunk,
-            "chunk_id": f"{txt_filename}-{i}",
-            "source": "txt"
+            "chunk_id": f"{filename}-{i}",
+            "source": pdf_path
         }
         documents.append(doc)
     
     return documents
 
-def process_txt_file(txt_path: str) -> List[Dict]:
-    if not os.path.exists(txt_path):
-        print(f"TXT file not found: {txt_path}")
-        return []
+def process_pdf_directory(pdf_dir: str) -> List[Dict]:
+    """Process all PDF files in a directory and return a list of document chunks."""
+    pdf_files = [os.path.join(pdf_dir, f) for f in os.listdir(pdf_dir) if f.lower().endswith('.pdf')]
     
-    print(f"Processing TXT file: {txt_path}")
-    documents = process_txt(txt_path)
-    print(f"  - Extracted {len(documents)} chunks from {Path(txt_path).name}")
+    all_documents = []
+    for pdf_file in pdf_files:
+        print(f"Processing {pdf_file}...")
+        documents = process_pdf(pdf_file)
+        all_documents.extend(documents)
     
-    return documents
+    return all_documents
 
-def generate_gemini_embeddings(documents: List[Dict], embedding_model):
-    """Generate embeddings using Google's Gemini API."""
-    print(f"Generating embeddings for {len(documents)} documents using Gemini...")
+def generate_gemini_embeddings(documents: List[Dict], embedding_model: str) -> tuple:
+    """Generate embeddings for documents using Gemini API."""
     embeddings = []
+    filtered_documents = []
+    
+    print(f"Generating embeddings for {len(documents)} document chunks...")
     
     for doc in tqdm(documents):
         try:
-            # Generate embedding for the document content
-            embedding = genai.embed_content(
+            # Generate embedding
+            result = genai.embed_content(
                 model=embedding_model,
                 content=doc["content"],
                 task_type="retrieval_document"
             )
-            embeddings.append(embedding["embedding"])
+            
+            # Add embedding to list
+            embeddings.append(result["embedding"])
+            filtered_documents.append(doc)
+            
+            # Add a small delay to avoid rate limiting
+            time.sleep(0.1)
+            
         except Exception as e:
             print(f"Error generating embedding for document {doc['chunk_id']}: {e}")
-            # Add a placeholder to maintain alignment with documents
-            embeddings.append(None)
     
-    # Filter out documents with failed embeddings
-    filtered_documents = []
-    filtered_embeddings = []
-    
-    for doc, embedding in zip(documents, embeddings):
-        if embedding is not None:
-            filtered_documents.append(doc)
-            filtered_embeddings.append(embedding)
-    
-    print(f"Successfully generated {len(filtered_embeddings)} embeddings out of {len(documents)} documents")
-    
-    return filtered_documents, filtered_embeddings
+    return filtered_documents, embeddings
 
-def create_faiss_index(embeddings, index_dir: str = "faiss_index"):
-    """Create a FAISS index from embeddings"""
+def create_faiss_index(embeddings: List[List[float]], index_dir: str) -> faiss.Index:
+    """Create a FAISS index from embeddings."""
     # Convert embeddings to numpy array
-    embeddings_array = np.array(embeddings, dtype=np.float32)
+    embedding_array = np.array(embeddings, dtype=np.float32)
     
-    # Get dimension of embeddings
-    dimension = embeddings_array.shape[1]
+    # Get dimensions
+    num_embeddings, dim = embedding_array.shape
+    
+    # Create index
+    index = faiss.IndexFlatL2(dim)
+    
+    # Add vectors to index
+    index.add(embedding_array)
     
     # Create directory if it doesn't exist
     os.makedirs(index_dir, exist_ok=True)
     
-    # Create FAISS index
-    # Using IndexFlatL2 for exact search with L2 (Euclidean) distance
-    index = faiss.IndexFlatL2(dimension)
-    
-    # Add vectors to the index
-    index.add(embeddings_array)
-    
-    # Save the index
+    # Save index
     index_path = os.path.join(index_dir, "vector.index")
     faiss.write_index(index, index_path)
     
-    print(f"FAISS index created with {len(embeddings)} vectors and saved to {index_path}")
+    print(f"Created FAISS index with {num_embeddings} vectors of dimension {dim}")
+    print(f"Index saved to {index_path}")
+    
     return index
 
-def store_metadata(documents, index_dir: str = "faiss_index"):
-    """Store document metadata separately from the FAISS index"""
-    # Create directory if it doesn't exist
-    os.makedirs(index_dir, exist_ok=True)
-    
-    # Create mapping from index to document ID
+def store_metadata(documents: List[Dict], index_dir: str) -> tuple:
+    """Store document metadata and ID mapping."""
+    # Create ID map (position in index -> document ID)
     id_map = {i: doc["chunk_id"] for i, doc in enumerate(documents)}
     
-    # Save id_map
+    # Create metadata map (document ID -> metadata)
+    metadata = {doc["chunk_id"]: {
+        "title": doc["title"],
+        "content": doc["content"],
+        "source": doc["source"]
+    } for doc in documents}
+    
+    # Save ID map
     id_map_path = os.path.join(index_dir, "id_map.pkl")
     with open(id_map_path, 'wb') as f:
         pickle.dump(id_map, f)
     
-    # Save documents metadata
+    # Save metadata
     metadata_path = os.path.join(index_dir, "metadata.json")
-    metadata = {doc["chunk_id"]: {
-        "title": doc.get("title", "Untitled"),
-        "url": doc.get("url", ""),
-        "source": doc.get("source", "txt"),
-        "content": doc.get("content", "")
-    } for doc in documents}
-    
     with open(metadata_path, 'w', encoding='utf-8') as f:
         json.dump(metadata, f, ensure_ascii=False, indent=2)
     
+    print(f"ID map saved to {id_map_path}")
     print(f"Metadata saved to {metadata_path}")
     return id_map, metadata
 
-def search_index(query_text, embedding_model, top_k=5, index_dir: str = "faiss_index"):
+def search_index(query_text, embedding_model, top_k=5, index_dir: str = "faiss_pdf_index"):
     """Search the FAISS index with a query string"""
     # Load the index
     index_path = os.path.join(index_dir, "vector.index")
@@ -248,24 +254,25 @@ def search_index(query_text, embedding_model, top_k=5, index_dir: str = "faiss_i
 def main():
     if not GOOGLE_API_KEY:
         raise ValueError("GOOGLE_API_KEY environment variable not set. Please set it in your .env file.")
+    
     try:
         embedding_model = setup_gemini()
     except Exception as e:
         print(f"Error setting up Gemini: {e}")
         return
     
-    txt_path = "data/angelone_support.txt"
+    pdf_dir = "data/pdfs"
     
-    # Check if TXT file exists
-    if not os.path.exists(txt_path):
-        print(f"TXT file not found: {txt_path}")
+    # Check if PDF directory exists
+    if not os.path.exists(pdf_dir):
+        print(f"PDF directory not found: {pdf_dir}")
         return
     
-    # Process TXT file
-    documents = process_txt_file(txt_path)
+    # Process PDF files
+    documents = process_pdf_directory(pdf_dir)
     
     if not documents:
-        print("No documents found to create embeddings. Please check if the TXT file exists and contains content.")
+        print("No documents found to create embeddings. Please check if the PDF directory contains PDF files.")
         return
     
     # Generate embeddings using Gemini
@@ -275,7 +282,7 @@ def main():
         print("Failed to generate embeddings. Please check your Gemini API key and try again.")
         return
     
-    index_dir = "faiss_angelone_support"
+    index_dir = "faiss_pdf_index"
     
     # Create FAISS index
     index = create_faiss_index(embeddings, index_dir)
@@ -283,10 +290,10 @@ def main():
     # Store metadata
     id_map, metadata = store_metadata(filtered_documents, index_dir)
     
-    print(f"TXT embeddings successfully created with Gemini and stored in FAISS index at '{index_dir}'")
+    print(f"PDF embeddings successfully created with Gemini and stored in FAISS index at '{index_dir}'")
     
     # Example search (uncomment to test)
-    # query = "How do I reset my password?"
+    # query = "What is the main topic of these documents?"
     # results = search_index(query, embedding_model, top_k=3, index_dir=index_dir)
     # print(f"\nSearch results for query: '{query}'")
     # for i, result in enumerate(results):
