@@ -843,11 +843,6 @@ st.markdown("""
     
     /* Responsive adjustments */
     @media (max-width: 768px) {
-        .chat-container {
-            padding: 1.5rem;
-            margin: 1rem;
-            border-radius: 1rem;
-        }
         
         .chat-message {
             padding: 1.2rem;
