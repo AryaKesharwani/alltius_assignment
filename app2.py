@@ -7,7 +7,6 @@ import asyncio
 import numpy as np
 import json
 import pickle
-from pathlib import Path
 from dotenv import load_dotenv
 import google.generativeai as genai
 import faiss
@@ -47,7 +46,6 @@ class FAISSRetrievalSystem:
     def initialize(self):
         """Initialize the FAISS retrieval system"""
         try:
-            # Check if the index exists
             index_path = os.path.join(self.index_dir, "vector.index")
             id_map_path = os.path.join(self.index_dir, "id_map.pkl")
             metadata_path = os.path.join(self.index_dir, "metadata.json")
@@ -235,7 +233,8 @@ def run_data_processing():
 st.set_page_config(
     page_title="Angel One Support Chatbot",
     page_icon="🤖",
-    layout="centered",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 if "messages" not in st.session_state:
@@ -243,96 +242,633 @@ if "messages" not in st.session_state:
         {"role": "assistant", "content": "Hello! I'm your Angel One Support assistant. How can I help you today?"}
     ]
 
-# Custom CSS for styling
 st.markdown("""
 <style>
-    .chat-message {
-        padding: 1.5rem; 
-        border-radius: 0.5rem; 
-        margin-bottom: 1rem; 
-        display: flex;
-        flex-direction: column;
-    }
-    .chat-message.user {
-        background-color: #F43F5E;
-        color: white;
-        border-radius: 0.5rem 0.5rem 0 0.5rem;
-        align-self: flex-end;
-    }
-    .chat-message.assistant {
-        background-color: #F5F7FB;
-        color: #333;
-        border-radius: 0.5rem 0.5rem 0.5rem 0;
-        align-self: flex-start;
-    }
-    .chat-message .message-content {
-        display: flex;
-        flex-direction: column;
-    }
-    .avatar {
-        width: 2.5rem;
-        height: 2.5rem;
-        border-radius: 50%;
-        background-color: #ccc;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        font-size: 1.2rem;
-        margin-right: 1rem;
-    }
-    .sources {
-        margin-top: 0.5rem;
-        font-size: 0.8rem;
-        font-style: italic;
-    }
-    .setup-instructions {
-        margin-top: 2rem;
-        padding: 1.5rem;
+    /* Global styles */
+    body {
+        font-family: 'Inter', sans-serif;
         background-color: #f8f9fa;
-        border-radius: 0.5rem;
-        border-left: 4px solid #f43f5e;
+        color: #333;
     }
+    
+    /* Header styling */
+    .stApp header {
+        background-color: #ffffff;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    /* Chat container */
+    .chat-container {
+        max-width: 950px;
+        margin: 0 auto;
+        padding: 2.8rem;
+        background-color: #ffffff;
+        border-radius: 1.5rem;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+        transition: all 0.4s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .chat-container:before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 6px;
+        background: linear-gradient(90deg, #F43F5E, #E11D48, #F43F5E);
+        background-size: 200% 100%;
+        animation: gradientBorder 3s linear infinite;
+    }
+    
+    @keyframes gradientBorder {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+    
+    .chat-container:hover {
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.18);
+        transform: translateY(-5px);
+    }
+    
+    /* Chat messages */
+    .chat-message {
+        padding: 1.8rem;
+        border-radius: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+        max-width: 85%;
+        position: relative;
+        transition: all 0.3s ease;
+        z-index: 1;
+    }
+    
+    .chat-message:hover {
+        transform: translateY(-3px) scale(1.01);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+    }
+    
+    .chat-message.user {
+        background: linear-gradient(135deg, #F43F5E 0%, #E11D48 100%);
+        color: white;
+        margin-left: auto;
+        border-radius: 1.5rem 1.5rem 0.25rem 1.5rem;
+        animation: slideInRight 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    
+    .chat-message.user:before {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 30%;
+        height: 30%;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        filter: blur(15px);
+        z-index: -1;
+    }
+    
+    .chat-message.assistant {
+        background-color: #F8F9FA;
+        color: #1F2937;
+        margin-right: auto;
+        border-radius: 1.5rem 1.5rem 1.5rem 0.25rem;
+        border-left: 5px solid #F43F5E;
+        animation: slideInLeft 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    
+    .chat-message.assistant:after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 30%;
+        height: 30%;
+        background: rgba(244, 63, 94, 0.08);
+        border-radius: 50%;
+        filter: blur(15px);
+        z-index: -1;
+    }
+    
+    @keyframes slideInRight {
+        from { transform: translateX(30px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    
+    @keyframes slideInLeft {
+        from { transform: translateX(-30px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    
+    /* Message content */
+    .message-content {
+        line-height: 1.8;
+        font-size: 1.1rem;
+        letter-spacing: 0.01em;
+    }
+    
+    /* Sources section */
+    .sources {
+        margin-top: 1.5rem;
+        padding: 1.2rem;
+        border-top: 1px solid #e9ecef;
+        font-size: 0.95rem;
+        color: #6B7280;
+        transition: all 0.4s ease;
+        border-radius: 1rem;
+        background-color: rgba(248, 249, 250, 0.7);
+    }
+    
+    .sources:hover {
+        background-color: #f1f5f9;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        transform: translateY(-2px);
+    }
+    
+    .sources a {
+        color: #F43F5E;
+        text-decoration: none;
+        transition: all 0.3s;
+        position: relative;
+        padding: 0.2rem 0.4rem;
+        border-radius: 0.3rem;
+        font-weight: 500;
+    }
+    
+    .sources a:after {
+        content: '';
+        position: absolute;
+        width: 0;
+        height: 2px;
+        bottom: 0;
+        left: 0;
+        background-color: #E11D48;
+        transition: width 0.4s ease;
+    }
+    
+    .sources a:hover {
+        color: #E11D48;
+        background-color: rgba(244, 63, 94, 0.08);
+    }
+    
+    .sources a:hover:after {
+        width: 100%;
+    }
+    
+    /* Input box */
     .stTextInput {
         position: fixed;
-        bottom: 3rem;
-        background-color: white;
-        padding: 1rem 0;
-        width: 100%;
-        left: 0;
+        bottom: 2.5rem;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 90%;
+        max-width: 950px;
+        background: white;
+        padding: 1.5rem;
+        border-radius: 1.5rem;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+        transition: all 0.4s ease;
+        z-index: 1000;
     }
-    .main-container {
-        margin-bottom: 6rem;
+    
+    .stTextInput:hover {
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.18);
+        transform: translateX(-50%) translateY(-5px);
     }
+    
+    .stTextInput > div {
+        border: 2px solid #F43F5E;
+        border-radius: 1rem;
+        transition: all 0.4s ease;
+        overflow: hidden;
+    }
+    
+    .stTextInput > div:before {
+        content: '';
+        position: absolute;
+        top: -2px;
+        left: -2px;
+        right: -2px;
+        bottom: -2px;
+        background: linear-gradient(90deg, #F43F5E, #E11D48, #F43F5E);
+        background-size: 200% 100%;
+        animation: gradientBorder 3s linear infinite;
+        z-index: -1;
+        border-radius: 1rem;
+        opacity: 0;
+        transition: opacity 0.4s ease;
+    }
+    
+    .stTextInput > div:focus-within {
+        border-color: #E11D48;
+        box-shadow: 0 0 0 5px rgba(244, 63, 94, 0.25);
+        transform: scale(1.02);
+    }
+    
+    .stTextInput > div:focus-within:before {
+        opacity: 1;
+    }
+    
+    /* Sidebar styling */
     .sidebar .block-container {
-        padding-top: 2rem;
+        background-color: #ffffff;
+        padding: 2rem;
+        border-radius: 1.5rem;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+        transition: all 0.4s ease;
     }
-    /* Improved button styling */
+    
+    .sidebar .block-container:hover {
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.15);
+        transform: translateY(-3px);
+    }
+    
+    /* Buttons */
     .stButton button {
-        width: 100%;
-        background-color: #F43F5E;
+        background: linear-gradient(135deg, #F43F5E 0%, #E11D48 100%);
         color: white;
         border: none;
-        padding: 0.5rem 1rem;
+        padding: 1rem 2rem;
+        border-radius: 1rem;
+        font-weight: 600;
+        transition: all 0.4s ease;
+        width: 100%;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 4px 15px rgba(244, 63, 94, 0.3);
+    }
+    
+    .stButton button:before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+        transition: all 0.8s ease;
+    }
+    
+    .stButton button:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 25px rgba(244, 63, 94, 0.5);
+        letter-spacing: 1.5px;
+    }
+    
+    .stButton button:hover:before {
+        left: 100%;
+    }
+    
+    .stButton button:active {
+        transform: translateY(2px);
+        box-shadow: 0 2px 10px rgba(244, 63, 94, 0.4);
+    }
+    
+    /* Setup instructions */
+    .setup-instructions {
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border-radius: 1.5rem;
+        padding: 3rem;
+        margin: 3rem 0;
+        border-left: 6px solid #F43F5E;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+        transition: all 0.4s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .setup-instructions:before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(244, 63, 94, 0.05) 0%, transparent 70%);
+        z-index: 0;
+    }
+    
+    .setup-instructions:hover {
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+        transform: translateY(-5px);
+    }
+    
+    .setup-instructions > * {
+        position: relative;
+        z-index: 1;
+    }
+    
+    /* Loading spinner */
+    .stSpinner {
+        border-color: #F43F5E;
+    }
+    
+    /* Alerts and notifications */
+    .stAlert {
+        border-radius: 1rem;
+        border: none;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+        transition: all 0.4s ease;
+        animation: fadeIn 0.5s ease-out;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .stAlert:hover {
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+        transform: translateY(-3px);
+    }
+    
+    /* Code blocks */
+    code {
+        background-color: #f1f5f9;
+        padding: 0.4em 0.6em;
         border-radius: 0.5rem;
-        font-weight: bold;
+        font-size: 0.95em;
+        color: #F43F5E;
+        transition: all 0.3s ease;
+        border-left: 3px solid #F43F5E;
+    }
+    
+    code:hover {
+        background-color: #e9ecef;
+        transform: translateY(-2px);
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    }
+    
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+        width: 10px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 5px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(180deg, #F43F5E 0%, #E11D48 100%);
+        border-radius: 5px;
+        transition: all 0.4s ease;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(180deg, #E11D48 0%, #be1a3c 100%);
+    }
+    
+    /* App title animation */
+    @keyframes gradientTitle {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+    
+    .app-title {
+        background: linear-gradient(90deg, #1F2937, #F43F5E, #1F2937);
+        background-size: 200% auto;
+        color: transparent;
+        -webkit-background-clip: text;
+        background-clip: text;
+        animation: gradientTitle 6s linear infinite;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        text-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        position: relative;
+    }
+    
+    .app-title:after {
+        content: '';
+        position: absolute;
+        width: 100px;
+        height: 5px;
+        background: linear-gradient(90deg, transparent, #F43F5E, transparent);
+        bottom: -10px;
+        left: 50%;
+        transform: translateX(-50%);
+        border-radius: 5px;
+    }
+    
+    /* Tooltip styling */
+    .tooltip {
+        position: relative;
+        display: inline-block;
+        cursor: pointer;
+    }
+    
+    .tooltip .tooltiptext {
+        visibility: hidden;
+        width: 250px;
+        background-color: #1F2937;
+        color: #fff;
+        text-align: center;
+        border-radius: 8px;
+        padding: 12px;
+        position: absolute;
+        z-index: 1;
+        bottom: 150%;
+        left: 50%;
+        margin-left: -125px;
+        opacity: 0;
+        transition: opacity 0.4s, transform 0.4s;
+        transform: translateY(10px);
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+    
+    .tooltip .tooltiptext:after {
+        content: '';
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -8px;
+        border-width: 8px;
+        border-style: solid;
+        border-color: #1F2937 transparent transparent transparent;
+    }
+    
+    .tooltip:hover .tooltiptext {
+        visibility: visible;
+        opacity: 1;
+        transform: translateY(0);
+    }
+    
+    /* Card hover effects */
+    .hover-card {
+        transition: all 0.4s ease;
+        position: relative;
+        z-index: 1;
+        overflow: hidden;
+    }
+    
+    .hover-card:before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(circle at top right, rgba(244, 63, 94, 0.1), transparent 70%);
+        opacity: 0;
+        transition: opacity 0.4s ease;
+        z-index: -1;
+    }
+    
+    .hover-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+    }
+    
+    .hover-card:hover:before {
+        opacity: 1;
+    }
+    
+    /* Typing indicator animation */
+    @keyframes typingDot {
+        0% { opacity: 0.3; transform: translateY(0); }
+        50% { opacity: 1; transform: translateY(-5px); }
+        100% { opacity: 0.3; transform: translateY(0); }
+    }
+    
+    .typing-indicator {
+        display: inline-flex;
+        align-items: center;
+        background-color: rgba(244, 63, 94, 0.1);
+        padding: 0.5rem 1rem;
+        border-radius: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .typing-indicator span {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background-color: #F43F5E;
+        margin: 0 3px;
+    }
+    
+    .typing-indicator span:nth-child(1) {
+        animation: typingDot 1s infinite 0s;
+    }
+    
+    .typing-indicator span:nth-child(2) {
+        animation: typingDot 1s infinite 0.2s;
+    }
+    
+    .typing-indicator span:nth-child(3) {
+        animation: typingDot 1s infinite 0.4s;
+    }
+    
+    /* Footer styling */
+    .footer {
+        text-align: center;
+        padding: 2rem 0;
+        margin-top: 4rem;
+        font-size: 0.95rem;
+        color: #6B7280;
+        border-top: 1px solid #e9ecef;
+        background: linear-gradient(180deg, transparent, rgba(248, 249, 250, 0.8));
+    }
+    
+    /* Quick suggestions */
+    .quick-suggestions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.8rem;
+        margin: 2rem 0;
+        justify-content: center;
+    }
+    
+    .suggestion-chip {
+        background-color: #f1f5f9;
+        color: #1F2937;
+        padding: 0.7rem 1.2rem;
+        border-radius: 2rem;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border: 1px solid #e9ecef;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    }
+    
+    .suggestion-chip:hover {
+        background-color: #F43F5E;
+        color: white;
+        transform: translateY(-3px);
+        box-shadow: 0 5px 15px rgba(244, 63, 94, 0.3);
+    }
+    
+    /* Pulse animation for new elements */
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(244, 63, 94, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); }
+    }
+    
+    .pulse-animation {
+        animation: pulse 2s infinite;
+    }
+    
+    /* Dark mode toggle */
+    .dark-mode-toggle {
+        position: fixed;
+        top: 1.5rem;
+        right: 1.5rem;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #F43F5E 0%, #E11D48 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        z-index: 1000;
         transition: all 0.3s ease;
     }
-    .stButton button:hover {
-        background-color: #E11D48;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    
+    .dark-mode-toggle:hover {
+        transform: rotate(45deg);
     }
-    /* Model selector styling */
-    .model-selector {
-        margin-top: 1rem;
-        padding: 1rem;
-        background-color: #f8f9fa;
-        border-radius: 0.5rem;
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .chat-container {
+            padding: 1.5rem;
+            margin: 1rem;
+            border-radius: 1rem;
+        }
+        
+        .chat-message {
+            padding: 1.2rem;
+            max-width: 90%;
+        }
+        
+        .stTextInput {
+            width: 95%;
+            padding: 1rem;
+        }
+        
+        .app-title {
+            font-size: 2rem !important;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
 
+# App title with animated gradient
 # App title
-st.title("Angel One Support Chatbot")
+st.markdown("<h1 style='text-align: center; color: #1F2937; font-size: 2.5rem; margin-bottom: 2rem;'>Angel One Support Chatbot</h1>", unsafe_allow_html=True)
 
 # Define the FAISS index paths
 FAISS_INDEX_DIR = "faiss_angelone_support"
@@ -346,7 +882,7 @@ DATA_EXISTS = os.path.exists(DATA_PATH) and os.path.getsize(DATA_PATH) > 0
 
 # Sidebar for API key configuration and advanced options
 with st.sidebar:
-    st.title("⚙️ Configuration")
+    st.markdown("<h2 style='color: #1F2937;'>⚙️ Configuration</h2>", unsafe_allow_html=True)
     
     # API Key configuration
     api_key = os.getenv("GOOGLE_API_KEY", "")
@@ -367,7 +903,7 @@ with st.sidebar:
             
     # Advanced options
     with st.expander("Advanced Options"):
-        st.markdown("#### Model Settings")
+        st.markdown("<h4 style='color: #1F2937;'>Model Settings</h4>", unsafe_allow_html=True)
         use_gemini = st.toggle("Use Gemini AI for Responses", value=bool(api_key), disabled=not bool(api_key))
         st.session_state["use_gemini"] = use_gemini
         
@@ -393,15 +929,19 @@ with st.sidebar:
         st.rerun()
         
     st.markdown("---")
-    st.markdown("### About")
+    st.markdown("<h3 style='color: #1F2937;'>About</h3>", unsafe_allow_html=True)
     st.markdown("""
-    This chatbot uses FAISS for vector search and Gemini LLM to provide accurate answers about Angel One's services and policies.
-    
-    **Powered by:**
-    - Google Gemini Pro
-    - FAISS Vector Database
-    - Streamlit
-    """)
+    <div style='background-color: #f8f9fa; padding: 1rem; border-radius: 0.75rem;'>
+        This chatbot uses FAISS for vector search and Gemini LLM to provide accurate answers about Angel One's services and policies.
+        
+        <p style='margin-top: 1rem; font-weight: 600;'>Powered by:</p>
+        <ul style='list-style-type: none; padding-left: 0;'>
+            <li>🤖 Google Gemini Pro</li>
+            <li>🔍 FAISS Vector Database</li>
+            <li>⚡ Streamlit</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
 
 # If FAISS index doesn't exist, show setup instructions
 if not FAISS_INDEX_EXISTS or not DATA_EXISTS:
@@ -409,9 +949,9 @@ if not FAISS_INDEX_EXISTS or not DATA_EXISTS:
     
     st.markdown("""
     <div class='setup-instructions'>
-        <h3>Setup Required</h3>
-        <p>The chatbot needs to process data and create a FAISS index. This process might take a few minutes.</p>
-        <ol>
+        <h3 style='color: #1F2937; margin-bottom: 1rem;'>Setup Required</h3>
+        <p style='color: #4B5563; margin-bottom: 1.5rem;'>The chatbot needs to process data and create a FAISS index. This process might take a few minutes.</p>
+        <ol style='color: #4B5563;'>
             <li>Make sure your text data is in the <code>data/angelone_support.txt</code> file</li>
             <li>Click the button below to create the FAISS index</li>
         </ol>
@@ -434,251 +974,6 @@ if not FAISS_INDEX_EXISTS or not DATA_EXISTS:
         
         # 3. Refresh this page when done
         """)
-    
-    # Create a sample create_faiss_index.py file
-    if st.button("Generate FAISS Index Script"):
-        script_content = """import os
-import sys
-import numpy as np
-from pathlib import Path
-from dotenv import load_dotenv
-import google.generativeai as genai
-import faiss
-import json
-import pickle
-import re
-from tqdm import tqdm
-
-# Load environment variables
-load_dotenv()
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-
-def setup_gemini():
-    genai.configure(api_key=GOOGLE_API_KEY)
-    
-    # Initialize embedding model
-    embedding_model = "models/embedding-001"
-    
-    return embedding_model
-
-def extract_text_from_txt(txt_path: str) -> str:
-    try:
-        with open(txt_path, 'r', encoding='utf-8') as file:
-            text = file.read()
-        return text
-    except Exception as e:
-        print(f"Error extracting text from {txt_path}: {e}")
-        return ""
-
-def clean_text(text: str) -> str:
-    # Convert multiple spaces to single space
-    text = re.sub(r'\\s+', ' ', text)
-    # Remove special characters and normalize
-    text = re.sub(r'[^\\w\\s\\.\,\\?\\!\\:\\;\\-\\(\\)]', ' ', text)
-    return text.strip()
-
-def split_into_chunks(text: str, chunk_size: int = 1000, overlap: int = 200):
-    # Clean the text
-    cleaned_text = clean_text(text)
-    
-    # If text is shorter than chunk_size, return as is
-    if len(cleaned_text) <= chunk_size:
-        return [cleaned_text]
-    
-    # Split text into sentences
-    sentences = re.split(r'(?<=[.!?])\\s+', cleaned_text)
-    chunks = []
-    current_chunk = ""
-    
-    for sentence in sentences:
-        if len(current_chunk) + len(sentence) <= chunk_size:
-            current_chunk += sentence + " "
-        else:
-            # Add the current chunk to chunks
-            if current_chunk:
-                chunks.append(current_chunk.strip())
-            
-            # Start a new chunk with overlap
-            if overlap > 0 and current_chunk:
-                # Get last few characters for overlap
-                overlap_text = " ".join(current_chunk.split()[-overlap//10:])
-                current_chunk = overlap_text + " " + sentence + " "
-            else:
-                current_chunk = sentence + " "
-    
-    # Add the last chunk if it's not empty
-    if current_chunk:
-        chunks.append(current_chunk.strip())
-    
-    return chunks
-
-def process_txt(txt_path: str):
-    # Extract TXT filename without extension
-    txt_filename = Path(txt_path).stem
-    
-    # Extract text from TXT
-    content = extract_text_from_txt(txt_path)
-    
-    if not content:
-        return []
-    
-    # Split content into chunks
-    chunks = split_into_chunks(content)
-    
-    documents = []
-    for i, chunk in enumerate(chunks):
-        doc = {
-            "title": txt_filename,
-            "url": txt_path,
-            "content": chunk,
-            "chunk_id": f"{txt_filename}-{i}",
-            "source": "txt"
-        }
-        documents.append(doc)
-    
-    return documents
-
-def process_txt_file(txt_path: str):
-    if not os.path.exists(txt_path):
-        print(f"TXT file not found: {txt_path}")
-        return []
-    
-    print(f"Processing TXT file: {txt_path}")
-    documents = process_txt(txt_path)
-    print(f"  - Extracted {len(documents)} chunks from {Path(txt_path).name}")
-    
-    return documents
-
-def generate_gemini_embeddings(documents, embedding_model):
-    print(f"Generating embeddings for {len(documents)} documents using Gemini...")
-    embeddings = []
-    
-    for doc in tqdm(documents):
-        try:
-            # Generate embedding for the document content
-            embedding = genai.embed_content(
-                model=embedding_model,
-                content=doc["content"],
-                task_type="retrieval_document"
-            )
-            embeddings.append(embedding["embedding"])
-        except Exception as e:
-            print(f"Error generating embedding for document {doc['chunk_id']}: {e}")
-            # Add a placeholder to maintain alignment with documents
-            embeddings.append(None)
-    
-    # Filter out documents with failed embeddings
-    filtered_documents = []
-    filtered_embeddings = []
-    
-    for doc, embedding in zip(documents, embeddings):
-        if embedding is not None:
-            filtered_documents.append(doc)
-            filtered_embeddings.append(embedding)
-    
-    print(f"Successfully generated {len(filtered_embeddings)} embeddings out of {len(documents)} documents")
-    
-    return filtered_documents, filtered_embeddings
-
-def create_faiss_index(embeddings, index_dir: str = "faiss_index"):
-    # Convert embeddings to numpy array
-    embeddings_array = np.array(embeddings, dtype=np.float32)
-    
-    # Get dimension of embeddings
-    dimension = embeddings_array.shape[1]
-    
-    # Create directory if it doesn't exist
-    os.makedirs(index_dir, exist_ok=True)
-    
-    # Create FAISS index
-    # Using IndexFlatL2 for exact search with L2 (Euclidean) distance
-    index = faiss.IndexFlatL2(dimension)
-    
-    # Add vectors to the index
-    index.add(embeddings_array)
-    
-    # Save the index
-    index_path = os.path.join(index_dir, "vector.index")
-    faiss.write_index(index, index_path)
-    
-    print(f"FAISS index created with {len(embeddings)} vectors and saved to {index_path}")
-    return index
-
-def store_metadata(documents, index_dir: str = "faiss_index"):
-    # Create directory if it doesn't exist
-    os.makedirs(index_dir, exist_ok=True)
-    
-    # Create mapping from index to document ID
-    id_map = {i: doc["chunk_id"] for i, doc in enumerate(documents)}
-    
-    # Save id_map
-    id_map_path = os.path.join(index_dir, "id_map.pkl")
-    with open(id_map_path, 'wb') as f:
-        pickle.dump(id_map, f)
-    
-    # Save documents metadata
-    metadata_path = os.path.join(index_dir, "metadata.json")
-    metadata = {doc["chunk_id"]: {
-        "title": doc.get("title", "Untitled"),
-        "url": doc.get("url", ""),
-        "source": doc.get("source", "txt"),
-        "content": doc.get("content", "")
-    } for doc in documents}
-    
-    with open(metadata_path, 'w', encoding='utf-8') as f:
-        json.dump(metadata, f, ensure_ascii=False, indent=2)
-    
-    print(f"Metadata saved to {metadata_path}")
-    return id_map, metadata
-
-def main():
-    if not GOOGLE_API_KEY:
-        raise ValueError("GOOGLE_API_KEY environment variable not set. Please set it in your .env file.")
-    try:
-        embedding_model = setup_gemini()
-    except Exception as e:
-        print(f"Error setting up Gemini: {e}")
-        return
-    
-    # Define TXT file path
-    txt_path = "data/angelone_support.txt"
-    
-    # Check if TXT file exists
-    if not os.path.exists(txt_path):
-        print(f"TXT file not found: {txt_path}")
-        return
-    
-    # Process TXT file
-    documents = process_txt_file(txt_path)
-    
-    if not documents:
-        print("No documents found to create embeddings. Please check if the TXT file exists and contains content.")
-        return
-    
-    # Generate embeddings using Gemini
-    filtered_documents, embeddings = generate_gemini_embeddings(documents, embedding_model)
-    
-    if not embeddings:
-        print("Failed to generate embeddings. Please check your Gemini API key and try again.")
-        return
-    
-    # Create FAISS index directory
-    index_dir = "faiss_angelone_support"
-    
-    # Create FAISS index
-    index = create_faiss_index(embeddings, index_dir)
-    
-    # Store metadata
-    id_map, metadata = store_metadata(filtered_documents, index_dir)
-    
-    print(f"TXT embeddings successfully created with Gemini and stored in FAISS index at '{index_dir}'")
-
-if __name__ == "__main__":
-    main()
-"""
-        with open("create_faiss_index.py", "w") as f:
-            f.write(script_content)
-        st.success("Successfully created 'create_faiss_index.py' file. You can now run the index creation.")
     
     st.stop()  # Stop execution here until setup is complete
 
@@ -715,7 +1010,7 @@ try:
         st.error("Failed to initialize the FAISS retrieval system.")
         st.stop()
     
-    st.markdown(f"<p style='text-align: center; font-size: 0.8rem;'>Using {retrieval_type} retrieval</p>", 
+    st.markdown(f"<p style='text-align: center; font-size: 0.9rem; color: #6B7280; margin-bottom: 2rem;'>Using {retrieval_type} retrieval</p>", 
                 unsafe_allow_html=True)
     
 except Exception as e:
@@ -725,7 +1020,7 @@ except Exception as e:
     st.stop()
 
 # Main app starts here
-st.markdown("<h3 style='text-align: center;'>Ask me anything about Angel One's services</h3>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center; color: #1F2937; margin-bottom: 2rem;'>Ask me anything about Angel One's services</h3>", unsafe_allow_html=True)
 
 # Display chat messages from history
 for message in st.session_state.messages:
@@ -733,9 +1028,9 @@ for message in st.session_state.messages:
         if message["role"] == "assistant" and "sources" in message:
             st.markdown(message["content"])
             if message["sources"]:
-                sources_html = "<div class='sources'><p>Sources:</p><ul>"
+                sources_html = "<div class='sources'><p style='font-weight: 600; margin-bottom: 0.5rem;'>Sources:</p><ul style='list-style-type: none; padding-left: 0;'>"
                 for source in message["sources"]:
-                    sources_html += f"<li><a href='{source['url']}' target='_blank'>{source['title']}</a></li>"
+                    sources_html += f"<li style='margin-bottom: 0.25rem;'>📄 <a href='{source['url']}' target='_blank'>{source['title']}</a></li>"
                 sources_html += "</ul></div>"
                 st.markdown(sources_html, unsafe_allow_html=True)
         else:
@@ -771,9 +1066,10 @@ if prompt := st.chat_input("Type your question here..."):
             
             # Display sources if available
             if result["has_answer"] and result["sources"]:
-                sources_html = "<div class='sources'><p>Sources:</p><ul>"
+                sources_html = "<div class='sources'><p style='font-weight: 600; margin-bottom: 0.5rem;'>Sources:</p><ul style='list-style-type: none; padding-left: 0;'>"
                 for source in result["sources"]:
-                    sources_html += f"<li><a href='{source['url']}' target='_blank'>{source['title']}</a></li>"
+                    sources_html += f"<li style='margin-bottom: 0.25rem;'>📄 <a href='{source['url']}' target='_blank'>{source['title']}</a></li>"
                 sources_html += "</ul></div>"
                 st.markdown(sources_html, unsafe_allow_html=True)
 
+st.markdown("</div>", unsafe_allow_html=True)
