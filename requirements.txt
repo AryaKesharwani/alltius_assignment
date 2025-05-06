@@ -2,8 +2,8 @@ requests
 beautifulsoup4
 streamlit
 python-dotenv
-langchain
-langchain-community
+# langchain
+# langchain-community
 sentence-transformers
 pydantic
 markdown
